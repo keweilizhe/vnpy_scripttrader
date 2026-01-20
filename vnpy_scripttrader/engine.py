@@ -30,11 +30,39 @@ from vnpy.trader.object import (
     CancelRequest
 )
 from vnpy.trader.datafeed import BaseDatafeed, get_datafeed
+from vnpy.trader.database import BaseDatabase, get_database, DB_TZ
+from vnpy_my_sqlite.ckz_sqlite_database import MySqliteDatabase
 
 
 APP_NAME = "ScriptTrader"
 
 EVENT_SCRIPT_LOG = "eScriptLog"
+
+
+def to_df(data_list: Sequence[BaseData]) -> DataFrame | None:
+    """"""
+    if not data_list:
+        return None
+
+    dict_list: list = [data.__dict__ for data in data_list if data]
+    return DataFrame(dict_list)
+
+
+def get_data(func: Callable, arg: Any = None, use_df: bool = False) -> Any:
+    """"""
+    if not arg:
+        data = func()
+    else:
+        data = func(arg)
+
+    if not use_df:
+        return data
+    elif data is None:
+        return data
+    else:
+        if not isinstance(data, list):
+            data = [data]
+        return to_df(data)
 
 
 class ScriptEngine(BaseEngine):
@@ -48,16 +76,20 @@ class ScriptEngine(BaseEngine):
         self.strategy_active: bool = False
         self.strategy_thread: Thread | None = None
 
-        self.datafeed: BaseDatafeed = get_datafeed()
+        # self.datafeed: BaseDatafeed = get_datafeed()
+        self.database: MySqliteDatabase = get_database()
 
         log_engine: LogEngine = self.main_engine.get_engine("log")
         log_engine.register_log(EVENT_SCRIPT_LOG)
+        self.is_testing = False
+        self.test_tick: TickData = None
 
     def init(self) -> None:
         """启动策略引擎"""
-        result: bool = self.datafeed.init()
-        if result:
-            self.write_log("数据服务初始化成功")
+        self.write_log("script engine init ok...")
+        # result: bool = self.datafeed.init()
+        # if result:
+        #     self.write_log("数据服务初始化成功")
 
     def start_strategy(self, script_path: str) -> None:
         """运行策略线程中的策略方法"""
@@ -296,7 +328,7 @@ class ScriptEngine(BaseEngine):
             end=end,
             interval=interval
         )
-
+        # TODO(ckz) 仅从本地 db 获取;
         bars: Sequence[BarData] | DataFrame = get_data(self.datafeed.query_bar_history, arg=req, use_df=use_df)
         return bars
 
@@ -313,28 +345,22 @@ class ScriptEngine(BaseEngine):
         subject: str = "脚本策略引擎通知"
         self.main_engine.send_email(subject, msg)
 
+    def get_engine_time(self) -> datetime:
+        '''
+        模拟测试: 返回tick时间
+        正式: 返回当前时间;
+        '''
+        if self.is_testing:
+            ret = self.test_tick.datetime
+        else:
+            ret = datetime.now()
+        return ret
 
-def to_df(data_list: Sequence[BaseData]) -> DataFrame | None:
-    """"""
-    if not data_list:
-        return None
-
-    dict_list: list = [data.__dict__ for data in data_list if data]
-    return DataFrame(dict_list)
-
-
-def get_data(func: Callable, arg: Any = None, use_df: bool = False) -> Any:
-    """"""
-    if not arg:
-        data = func()
-    else:
-        data = func(arg)
-
-    if not use_df:
-        return data
-    elif data is None:
-        return data
-    else:
-        if not isinstance(data, list):
-            data = [data]
-        return to_df(data)
+    def get_account_available(self) -> float:
+        """
+        获取账户可用资金
+        """
+        all_account = self.get_all_accounts()
+        if not all_account:
+            return 0.0
+        return all_account[0].available
