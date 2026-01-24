@@ -7,6 +7,10 @@ from vnpy.trader.object import LogData
 from ..engine import APP_NAME, EVENT_SCRIPT_LOG, BaseEngine
 
 
+# 默认脚本相对路径（相对于 vnpy 包的位置）
+DEFAULT_SCRIPT_RELATIVE_PATH = "my_script_strategy/ming_xing_trade.py"
+
+
 class ScriptManager(QtWidgets.QWidget):
     """"""
     signal_log: QtCore.Signal = QtCore.Signal(Event)
@@ -24,6 +28,7 @@ class ScriptManager(QtWidgets.QWidget):
 
         self.init_ui()
         self.register_event()
+        self.load_default_script()  # 加载默认脚本路径
 
         self.script_engine.init()
 
@@ -68,6 +73,77 @@ class ScriptManager(QtWidgets.QWidget):
 
         self.event_engine.register(EVENT_SCRIPT_LOG, self.signal_log.emit)
 
+    def load_default_script(self) -> None:
+        """
+        加载默认脚本路径
+
+        尝试多种方式定位脚本文件：
+        1. 相对于 vnpy 包的位置
+        2. 相对于当前工作目录
+        3. 相对于项目根目录
+        """
+        default_path = self._find_default_script()
+
+        if default_path and default_path.exists():
+            self.script_path = str(default_path)
+            self.strategy_line.setText(self.script_path)
+        else:
+            # 如果找不到默认脚本，显示提示
+            self.strategy_line.setPlaceholderText("请选择策略脚本文件...")
+
+    def _find_default_script(self) -> Path | None:
+        """
+        查找默认脚本文件
+
+        按优先级尝试多种路径：
+        1. vnpy 包同级目录
+        2. 当前工作目录
+        3. 环境变量 VNPY_PROJECT_ROOT
+
+        Returns:
+            找到的脚本路径，未找到返回 None
+        """
+        import os
+
+        # 方法1：相对于 vnpy 包的位置
+        try:
+            import vnpy
+            vnpy_package_dir = Path(vnpy.__file__).parent
+            script_path = vnpy_package_dir / DEFAULT_SCRIPT_RELATIVE_PATH
+            if script_path.exists():
+                return script_path.resolve()
+        except (ImportError, AttributeError):
+            pass
+
+        # 方法2：相对于当前工作目录
+        cwd_path = Path.cwd() / "vnpy" / DEFAULT_SCRIPT_RELATIVE_PATH
+        if cwd_path.exists():
+            return cwd_path.resolve()
+
+        # 方法3：直接在当前目录查找
+        direct_path = Path.cwd() / DEFAULT_SCRIPT_RELATIVE_PATH
+        if direct_path.exists():
+            return direct_path.resolve()
+
+        # 方法4：通过环境变量指定的项目根目录
+        project_root = os.environ.get("VNPY_PROJECT_ROOT")
+        if project_root:
+            env_path = Path(project_root) / "vnpy" / DEFAULT_SCRIPT_RELATIVE_PATH
+            if env_path.exists():
+                return env_path.resolve()
+
+        # 方法5：向上查找包含 vnpy 目录的父目录
+        search_path = Path.cwd()
+        for _ in range(5):  # 最多向上查找5层
+            vnpy_dir = search_path / "vnpy"
+            if vnpy_dir.is_dir():
+                script_path = vnpy_dir / DEFAULT_SCRIPT_RELATIVE_PATH
+                if script_path.exists():
+                    return script_path.resolve()
+            search_path = search_path.parent
+
+        return None
+
     def show(self) -> None:
         """"""
         self.showMaximized()
@@ -88,16 +164,42 @@ class ScriptManager(QtWidgets.QWidget):
         self.script_engine.stop_strategy()
 
     def select_script(self) -> None:
-        """"""
-        cwd: str = str(Path.cwd())
+        """
+        选择脚本文件
+
+        默认打开 vnpy/my_script_strategy 目录
+        """
+        # 优先使用脚本所在目录，否则使用当前工作目录
+        if self.script_path:
+            default_dir = str(Path(self.script_path).parent)
+        else:
+            default_dir = self._get_default_script_dir()
 
         path, type_ = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "载入策略脚本",
-            cwd,
+            default_dir,
             "Python File(*.py)"
         )
 
         if path:
             self.script_path = path
             self.strategy_line.setText(path)
+
+    def _get_default_script_dir(self) -> str:
+        """
+        获取默认的脚本目录
+
+        Returns:
+            脚本目录路径字符串
+        """
+        try:
+            import vnpy
+            vnpy_dir = Path(vnpy.__file__).parent
+            script_dir = vnpy_dir / "my_script_strategy"
+            if script_dir.exists():
+                return str(script_dir)
+        except (ImportError, AttributeError):
+            pass
+
+        return str(Path.cwd())

@@ -32,6 +32,7 @@ from vnpy.trader.object import (
 from vnpy.trader.datafeed import BaseDatafeed, get_datafeed
 from vnpy.trader.database import BaseDatabase, get_database, DB_TZ
 from vnpy_my_sqlite.ckz_sqlite_database import MySqliteDatabase
+from vnpy.common_util.spd_logger import splog
 
 
 APP_NAME = "ScriptTrader"
@@ -111,13 +112,14 @@ class ScriptEngine(BaseEngine):
         script_name: str = path.parts[-1]
         module_name: str = script_name.replace(".py", "")
 
-        try:
-            module: ModuleType = importlib.import_module(module_name)
-            importlib.reload(module)
-            module.run(self)
-        except Exception:
-            msg: str = f"触发异常已停止\n{traceback.format_exc()}"
-            self.write_log(msg)
+        # try:
+        module: ModuleType = importlib.import_module(module_name)
+        splog.info("run_strategy import name: %s, module:%s", module_name, module)
+        importlib.reload(module)
+        module.run(self)
+        # except Exception:
+        #     msg: str = f"触发异常已停止\n{traceback.format_exc()}"
+        #     self.write_log(msg)
 
     def stop_strategy(self) -> None:
         """停止运行中的策略"""
@@ -328,7 +330,7 @@ class ScriptEngine(BaseEngine):
             end=end,
             interval=interval
         )
-        # TODO(ckz) 仅从本地 db 获取;
+        # NOTE(ckz) 仅从本地 db 获取;
         bars: Sequence[BarData] | DataFrame = get_data(self.datafeed.query_bar_history, arg=req, use_df=use_df)
         return bars
 
