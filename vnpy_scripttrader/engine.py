@@ -112,14 +112,14 @@ class ScriptEngine(BaseEngine):
         script_name: str = path.parts[-1]
         module_name: str = script_name.replace(".py", "")
 
-        # try:
-        module: ModuleType = importlib.import_module(module_name)
-        splog.info("run_strategy import name: %s, module:%s", module_name, module)
-        importlib.reload(module)
-        module.run(self)
-        # except Exception:
-        #     msg: str = f"触发异常已停止\n{traceback.format_exc()}"
-        #     self.write_log(msg)
+        try:
+            module: ModuleType = importlib.import_module(module_name)
+            splog.info("run_strategy import name: %s, module:%s", module_name, module)
+            importlib.reload(module)
+            module.run(self)
+        except Exception:
+            msg: str = f"触发异常已停止\n{traceback.format_exc()}"
+            self.write_log(msg)
 
     def stop_strategy(self) -> None:
         """停止运行中的策略"""
@@ -366,3 +366,12 @@ class ScriptEngine(BaseEngine):
         if not all_account:
             return 0.0
         return all_account[0].available
+
+    def get_first_account(self) -> AccountData | None:
+        """
+        获取第一个账户
+        """
+        all_account = self.get_all_accounts()
+        if not all_account:
+            return None
+        return all_account[0]
