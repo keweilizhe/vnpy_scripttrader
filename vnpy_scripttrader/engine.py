@@ -355,7 +355,7 @@ class ScriptEngine(BaseEngine):
         if self.is_testing:
             ret = self.test_tick.datetime
         else:
-            ret = datetime.now(tz=DB_TZ)
+            ret = datetime.now()
         return ret
 
     def get_account_available(self) -> float:
